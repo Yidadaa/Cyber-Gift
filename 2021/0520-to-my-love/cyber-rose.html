@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cyber Rose</title>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/GodRaysShader.js"></script>
+</head>
+
+<style>
+  body {
+    margin: 0;
+  }
+
+  #loading {
+    position: fixed;
+    backdrop-filter: blur(20px);
+    background: rgba(0, 0, 0, 0.4);
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 18px;
+    color: white;
+    flex-direction: row;
+    flex-wrap: wrap;
+    transition: all ease 1s;
+    opacity: 1;
+  }
+
+  #loading-value {
+    display: inline-block;
+    min-width: 40px;
+  }
+
+  #loading-bar {
+    width: 0%;
+    background-color: white;
+    height: 5px;
+    border-radius: 20px;
+    margin-top: 10px;
+    transition: all ease .3s;
+  }
+</style>
+
+<body>
+  <div class="content">
+    <div id="loading">
+      <div class="loading-content">
+        <div id="loading-text">
+          <span>正在前往妮妮的♥：</span>
+          <span id="loading-value">0</span>
+          <span>%</span>
+        </div>
+        <div id="loading-bar"></div>
+      </div>
+    </div>
+    <div id="displayer"></div>
+  </div>
+</body>
+
+<script>
+  class ThreeScene {
+    constructor(enableAxis = false, onProgress = () => {}) {
+      this.enableAxis = enableAxis
+      this.progress = 0
+      this.onProgress = onProgress
+      this.debug = false
+      this.treeProgress = 0
+      this.roseProgress = 0
+      this.textureProgress = 0
+    }
+
+    updateProgress() {
+      const percent = 0.3 * this.treeProgress + 0.3 * this.roseProgress + 0.5 * this.textureProgress
+      this.onProgress(percent)
+    }
+
+    mount() {
+      // set up camera
+      this.displayer = document.getElementById('displayer')
+      this.camera = new THREE.PerspectiveCamera(120, window.innerWidth / window.innerHeight, 0.25, 1000);
+      this.camera.position.set(1.3912466863530404, 1.8662549394659687, 5.1154456470483005);
+      this.camera.rotation.set(-0.2609922066721907, 0.2569509726474865, 0.06777092431684358)
+      // set up scene
+      this.scene = new THREE.Scene();
+      // this.scene.background = new THREE.Color(0xe0e0e0);
+      // this.scene.fog = new THREE.FogExp2(0xeeeeee, 0.08);
+      // set up light
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
+      hemiLight.position.set(0, 100, 0);
+      this.scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff);
+      dirLight.position.set(0, 100, 10);
+      this.scene.add(dirLight);
+
+
+      if (!this.debug) {
+        const groundTexture = new THREE.TextureLoader().load('./texture/grass-darker.jpg');
+        this.textureProgress += 10
+        this.updateProgress()
+        groundTexture.wrapS = groundTexture.wrapT = THREE.RepeatWrapping;
+        groundTexture.repeat.set(3500, 3500);
+        groundTexture.anisotropy = 16;
+        groundTexture.encoding = THREE.sRGBEncoding;
+
+        const groundMaterial = new THREE.MeshLambertMaterial({ map: groundTexture });
+
+        let mesh = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), groundMaterial);
+        mesh.position.y = 0;
+        mesh.rotation.x = - Math.PI / 2;
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+      } else {
+        // set up ground
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshPhongMaterial({ color: 0x999999, depthWrite: false }));
+        mesh.rotation.x = - Math.PI / 2;
+        this.scene.add(mesh);
+
+        const grid = new THREE.GridHelper(200, 40, 0x000000, 0x000000);
+        grid.material.opacity = 0.2;
+        grid.material.transparent = true;
+        this.scene.add(grid);
+      }
+
+      // set up skybox
+      this.loadSkyBox()
+
+      // load model
+      this.loader = new THREE.GLTFLoader()
+      this.loadSingleRose()
+      this.loadMyLove()
+      this.loadTree()
+
+      // set up axis
+      if (this.enableAxis) this.scene.add(new THREE.AxesHelper(5))
+      // set up render
+      this.renderer = new THREE.WebGLRenderer({ antialias: true })
+      this.renderer.setPixelRatio(window.devicePixelRatio / 2)
+      this.renderer.setSize(window.innerWidth, window.innerHeight)
+      this.renderer.outputEncoding = THREE.sRGBEncoding
+      this.renderer.setClearColor( 0xffffff );
+      this.renderer.autoClear = false;
+      this.displayer.appendChild(this.renderer.domElement)
+
+      // set up control
+      const controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+      controls.target.set(0, 0.5, 0);
+      controls.update();
+      controls.enablePan = false;
+      controls.enableDamping = true;
+      controls.addEventListener('change', () => this.render())
+      if (!this.debug) {
+        controls.enableZoom = false
+        controls.enablePan = false
+        controls.minAzimuthAngle = -Math.PI / 180 * 10
+        controls.maxAzimuthAngle = Math.PI / 180 * 10
+        controls.minPolarAngle = Math.PI / 180 * 70
+        controls.maxPolarAngle = Math.PI / 180 * 80
+      }
+    }
+
+    render() {
+      this.renderer.render(this.scene, this.camera)
+      if (!this.debug) return
+      console.log(this.camera.rotation.x, this.camera.rotation.y, this.camera.rotation.z)
+      console.log(this.camera.position.x, this.camera.position.y, this.camera.position.z)
+    }
+
+    loadMyLove() {
+      const nnTexture = new THREE.TextureLoader().load('./texture/nn.png');
+      nnTexture.wrapS = nnTexture.wrapT = THREE.RepeatWrapping;
+      nnTexture.anisotropy = 16;
+      nnTexture.encoding = THREE.sRGBEncoding;
+
+      const nnMaterial = new THREE.MeshLambertMaterial({ map: nnTexture, transparent: true });
+
+      let w = 1, h = 3.2, scale = 1.5
+      w *= scale
+      h *= scale
+      let mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), nnMaterial);
+      mesh.position.y = h / 2;
+      this.scene.add(mesh);
+      this.textureProgress += 10
+      this.updateProgress()
+    }
+
+    loadSkyBox() {
+      let textureFileNames = ['ft', 'bk', 'up', 'dn', 'rt', 'lf']
+      let materialArray = textureFileNames.map(v => {
+        let texture = new THREE.TextureLoader().load(`./skybox/nightsky_${v}.png`);
+        // let texture = new THREE.TextureLoader().load(`./skybox/${v}.jpg`);
+        let mater = new THREE.MeshBasicMaterial({ map: texture })
+        mater.side = THREE.DoubleSide
+        this.textureProgress += 10
+        this.updateProgress()
+        return mater
+      })
+
+      let skyboxGeo = new THREE.BoxGeometry(1000, 1000, 1000);
+      let skybox = new THREE.Mesh(skyboxGeo, materialArray);
+      skybox.rotation.set(0, Math.PI / 180 * 140, 0)
+      this.scene.add(skybox);
+    }
+
+    loadTree(scale = 60) {
+      this.loader.load('./tree.glb', (gltf) => {
+        this.treeModel = gltf.scene
+        this.treeModel.traverse((o) => {
+          if (o.isMesh) {
+            o.material.side = THREE.DoubleSide
+          }
+        })
+        this.treeModel.scale.set(scale, scale, scale)
+        this.treeModel.position.set(0, 12, -20)
+        this.scene.add(this.treeModel)
+        this.render()
+        this.treeProgress = 100
+        this.updateProgress()
+      }, xhr => {
+        const percent = Math.round(xhr.loaded / xhr.total * 50)
+        this.treeProgress = percent
+        this.updateProgress()
+      })
+    }
+
+    getTri() {
+      var v1 = new THREE.Vector3(0, 0, 0);
+      var v2 = new THREE.Vector3(30, 0, 0);
+      var v3 = new THREE.Vector3(30, 30, 0);
+      var triangle = new THREE.Triangle(v1, v2, v3);
+      var normal = new THREE.Vector3(0, 0, 0);
+      triangle.getNormal(normal);
+      var geom = new THREE.BufferGeometry([v1, v2, v3]);
+      geom.faces.push(new THREE.Face3(0, 1, 2, normal));
+      var mesh = new THREE.Mesh(geom, new THREE.MeshNormalMaterial());
+      return mesh
+    }
+
+    loadSingleRose(scale = 0.4, shouldRender = false, cb = () => { }) {
+      this.loader.load('./single-rose.glb', (gltf) => {
+        this.model = gltf.scene
+        // fix material
+        let mesh = null
+        this.model.traverse((o) => {
+          if (o.isMesh) {
+            o.material.side = THREE.DoubleSide
+            mesh = o
+          }
+        })
+        if (shouldRender) this.scene.add(this.model)
+
+        // test instancing
+        let dummy = new THREE.Object3D();
+        let total = 10
+        let instancedMesh = new THREE.InstancedMesh(mesh.geometry, mesh.material, total * total);
+        for (let i = 0; i < total; i += 1)
+          for (let j = 0; j < total; j += 1) {
+            dummy.position.x = ((i - total / 2) + Math.random()) * 1;
+            dummy.position.z = ((j - total / 2) + Math.random()) * 2;
+            let zScale = (total - dummy.position.z * 1.5) / total * 0.5 + 0.5
+            let _scale = (Math.random() * 0.5 + 1) * scale * zScale
+            dummy.scale.set(_scale, _scale, _scale);
+            dummy.rotation.y = THREE.Math.degToRad(360 * (Math.random() - 0.5));
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(i * total + j, dummy.matrix);
+          }
+        this.scene.add(instancedMesh);
+        this.render()
+        this.roseProgress = 100
+        this.updateProgress()
+      }, xhr => {
+        const percent = Math.round(xhr.loaded / xhr.total * 50)
+        this.roseProgress = percent
+        this.updateProgress()
+      }, (e) => console.error(e))
+    }
+  }
+
+  window.onload = () => {
+    const loadingValue = document.getElementById('loading-value')
+    const loadingBar = document.getElementById('loading-bar')
+    const loading = document.getElementById('loading')
+    window._3d = new ThreeScene(false, (percent) => {
+      console.log(percent)
+      loadingValue.innerText = percent
+      loadingBar.style.width = `${percent}%`
+      if (percent >= 99) {
+        loading.style.opacity = 0
+        loading.innerText = '妮妮 520 快乐'
+        setTimeout(() => {
+          loading.style.display = 'none'
+        }, 1000);
+      }
+    })
+    window._3d.mount(false)
+    console.log('loaded!', window._3d)
+  }
+</script>
+
+</html>
